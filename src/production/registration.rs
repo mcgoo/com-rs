@@ -12,6 +12,7 @@ use std::str;
 
 #[doc(hidden)]
 pub struct RegistryKeyInfo {
+    key: HKEY,
     key_path: CString,
     key_value_name: CString,
     key_value_data: CString,
@@ -19,8 +20,14 @@ pub struct RegistryKeyInfo {
 
 #[doc(hidden)]
 impl RegistryKeyInfo {
-    pub fn new(key_path: &str, key_value_name: &str, key_value_data: &str) -> RegistryKeyInfo {
+    pub fn new(
+        key: HKEY,
+        key_path: &str,
+        key_value_name: &str,
+        key_value_data: &str,
+    ) -> RegistryKeyInfo {
         RegistryKeyInfo {
+            key,
             key_path: CString::new(key_path).unwrap(),
             key_value_name: CString::new(key_value_name).unwrap(),
             key_value_data: CString::new(key_value_data).unwrap(),
@@ -53,7 +60,8 @@ pub fn unregister_keys(registry_keys_to_remove: &Vec<RegistryKeyInfo>) -> HRESUL
     hr
 }
 
-const HKEY_CLASSES_ROOT: HKEY = 0x8000_0000 as HKEY;
+pub const HKEY_CLASSES_ROOT: HKEY = 0x8000_0000 as HKEY;
+pub const HKEY_CURRENT_USER_ROOT: HKEY = 0x8000_0001 as HKEY;
 const KEY_ALL_ACCESS: u32 = 0x000F_003F;
 const REG_OPTION_NON_VOLATILE: u32 = 0x00000000;
 fn create_class_key(key_info: &RegistryKeyInfo) -> Result<HKEY, LSTATUS> {
@@ -63,7 +71,7 @@ fn create_class_key(key_info: &RegistryKeyInfo) -> Result<HKEY, LSTATUS> {
     let lpdw_disposition = std::ptr::null_mut::<u32>();
     let result = unsafe {
         RegCreateKeyExA(
-            HKEY_CLASSES_ROOT,
+            key_info.key,
             key_info.key_path.as_ptr(),
             0,
             lp_class,
@@ -120,7 +128,7 @@ fn add_class_key(key_info: &RegistryKeyInfo) -> LSTATUS {
 }
 
 fn remove_class_key(key_info: &RegistryKeyInfo) -> LSTATUS {
-    unsafe { RegDeleteKeyA(HKEY_CLASSES_ROOT, key_info.key_path.as_ptr()) }
+    unsafe { RegDeleteKeyA(key_info.key, key_info.key_path.as_ptr()) }
 }
 
 #[doc(hidden)]
@@ -217,11 +225,13 @@ macro_rules! inproc_dll_module {
             let file_path = unsafe { ::com::production::registration::get_dll_file_path(_HMODULE) };
             vec![
                 RegistryKeyInfo::new(
+                    ::com::production::registration::HKEY_CLASSES_ROOT,
                     &::com::production::registration::class_key_path($class_id_one),
                     "",
                     stringify!($class_type_one),
                 ),
                 RegistryKeyInfo::new(
+                    ::com::production::registration::HKEY_CLASSES_ROOT,
                     &::com::production::registration::class_inproc_key_path($class_id_one),
                     "",
                     &file_path,
